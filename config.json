@@ -1,0 +1,8 @@
+{
+  "version": 1,
+  "twitch": {
+    "forcePlayerType": "popout",
+    "backupTypes": ["embed", "popout", "autoplay", "picture-by-picture"],
+    "adMarker": "stitched"
+  }
+}

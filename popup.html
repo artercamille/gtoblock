@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <style>
+    body { margin: 0; width: 240px; font: 14px system-ui, sans-serif; background: #111318; color: #f1f1f4; }
+    .wrap { padding: 16px; }
+    h1 { font-size: 17px; margin: 0 0 14px; letter-spacing: .3px; }
+    h1 span { color: #7c5cff; }
+    .row { display: flex; align-items: center; justify-content: space-between; }
+    .switch { position: relative; width: 46px; height: 26px; }
+    .switch input { display: none; }
+    .slider { position: absolute; inset: 0; background: #3a3d46; border-radius: 26px; cursor: pointer; transition: .2s; }
+    .slider::before { content: ""; position: absolute; width: 20px; height: 20px; left: 3px; top: 3px; background: #fff; border-radius: 50%; transition: .2s; }
+    input:checked + .slider { background: #7c5cff; }
+    input:checked + .slider::before { transform: translateX(20px); }
+    .stat { margin-top: 14px; padding: 10px; background: #1b1e26; border-radius: 10px; text-align: center; }
+    .stat b { display: block; font-size: 22px; color: #7c5cff; }
+    .leak { display: none; margin-top: 12px; padding: 10px; border-radius: 10px; background: #3b1517; border: 1px solid #e5484d; font-size: 12px; line-height: 1.4; }
+    .leak button { margin-top: 8px; width: 100%; padding: 6px; border: 0; border-radius: 8px; background: #e5484d; color: #fff; font-weight: 600; cursor: pointer; }
+    .hint { margin-top: 10px; font-size: 11px; color: #8b8f9b; text-align: center; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>gto<span>block</span></h1>
+    <div class="row">
+      <span id="label">Activé</span>
+      <label class="switch"><input type="checkbox" id="toggle"><span class="slider"></span></label>
+    </div>
+    <div class="stat"><b id="count">0</b>pubs vidéo zappées</div>
+    <div class="leak" id="leak">
+      <b id="leakTitle">Une pub est passée</b><br>
+      Le site a sûrement changé quelque chose. Demande une maj à Claude, puis fais <code>git pull</code> et recharge l'extension.
+      <button id="leakOk">C'est noté</button>
+    </div>
+    <div class="hint">Recharge la page après avoir changé l'état.</div>
+  </div>
+  <script src="popup.js"></script>
+</body>
+</html>

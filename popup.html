@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <style>
-    body { margin: 0; width: 240px; font: 14px system-ui, sans-serif; background: #111318; color: #f1f1f4; }
+    body { margin: 0; width: 250px; font: 14px system-ui, sans-serif; background: #111318; color: #f1f1f4; }
     .wrap { padding: 16px; }
     h1 { font-size: 17px; margin: 0 0 14px; letter-spacing: .3px; }
     h1 span { color: #7c5cff; }
@@ -16,9 +16,14 @@
     input:checked + .slider::before { transform: translateX(20px); }
     .stat { margin-top: 14px; padding: 10px; background: #1b1e26; border-radius: 10px; text-align: center; }
     .stat b { display: block; font-size: 22px; color: #7c5cff; }
-    .leak { display: none; margin-top: 12px; padding: 10px; border-radius: 10px; background: #3b1517; border: 1px solid #e5484d; font-size: 12px; line-height: 1.4; }
-    .leak button { margin-top: 8px; width: 100%; padding: 6px; border: 0; border-radius: 8px; background: #e5484d; color: #fff; font-weight: 600; cursor: pointer; }
-    .hint { margin-top: 10px; font-size: 11px; color: #8b8f9b; text-align: center; }
+    .box { display: none; margin-top: 12px; padding: 10px; border-radius: 10px; font-size: 12px; line-height: 1.4; }
+    .box button { margin-top: 8px; width: 100%; padding: 7px; border: 0; border-radius: 8px; color: #fff; font-weight: 600; cursor: pointer; }
+    .leak { background: #3b1517; border: 1px solid #e5484d; }
+    .leak button { background: #e5484d; }
+    .setup { background: #2e2710; border: 1px solid #e0a82e; }
+    .setup button { background: #c98f17; }
+    .status { margin-top: 12px; font-size: 11px; color: #8b8f9b; text-align: center; }
+    .status.ok { color: #46c47e; }
   </style>
 </head>
 <body>
@@ -29,12 +34,20 @@
       <label class="switch"><input type="checkbox" id="toggle"><span class="slider"></span></label>
     </div>
     <div class="stat"><b id="count">0</b>pubs vidéo zappées</div>
-    <div class="leak" id="leak">
+
+    <div class="box setup" id="setup">
+      <b>Dernière étape pour les mises à jour auto</b><br>
+      Sur la page qui va s'ouvrir, active l'interrupteur <b>« Autoriser les scripts utilisateur »</b>.
+      <button id="setupBtn">Ouvrir le réglage</button>
+    </div>
+
+    <div class="box leak" id="leak">
       <b id="leakTitle">Une pub est passée</b><br>
-      Le site a sûrement changé quelque chose. Demande une maj à Claude, puis fais <code>git pull</code> et recharge l'extension.
+      Le site a sûrement changé quelque chose. Préviens Claude : la correction arrivera toute seule.
       <button id="leakOk">C'est noté</button>
     </div>
-    <div class="hint">Recharge la page après avoir changé l'état.</div>
+
+    <div class="status" id="status">Recharge la page après avoir changé l'état.</div>
   </div>
   <script src="popup.js"></script>
 </body>

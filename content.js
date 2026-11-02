@@ -1,4 +1,5 @@
-// Masquage visuel des emplacements pub restants sur tous les sites
+// gtoblock — masquage visuel des emplacements pub restants sur tous les sites
+// (ce script n'est chargé que si l'extension est activée)
 (() => {
   const CSS = `
     ins.adsbygoogle, .adsbygoogle,
@@ -12,21 +13,7 @@
     .advertisement, .advertising, .sponsored-ad, #ad-banner, #ad-container
     { display: none !important; }
   `;
-  let style = null;
-
-  function apply(enabled) {
-    if (enabled && !style) {
-      style = document.createElement("style");
-      style.textContent = CSS;
-      (document.head || document.documentElement).appendChild(style);
-    } else if (!enabled && style) {
-      style.remove();
-      style = null;
-    }
-  }
-
-  chrome.storage.local.get({ enabled: true }, (r) => apply(r.enabled));
-  chrome.storage.onChanged.addListener((c) => {
-    if (c.enabled) apply(c.enabled.newValue);
-  });
+  const style = document.createElement("style");
+  style.textContent = CSS;
+  (document.head || document.documentElement).appendChild(style);
 })();

@@ -5,13 +5,10 @@
 // récupérée avec un autre type de lecteur (embed, popout, autoplay…) qui n'a pas de pub.
 // En dernier recours, on retire les segments pub.
 //
-// Les réglages sensibles viennent de config.json (GitHub), modifiables sans réinstaller.
+// Les réglages sensibles viennent de config.json (GitHub) via GTO_CONFIG, fourni par l'extension.
+// (ce script n'est chargé que si l'extension est activée)
 (() => {
-  let CFG = {};
-  try {
-    if (localStorage.getItem("gtoblock_off") === "1") return;
-    CFG = (JSON.parse(localStorage.getItem("gtoblock_cfg") || "{}") || {}).twitch || {};
-  } catch (e) {}
+  const CFG = (typeof GTO_CONFIG !== "undefined" && GTO_CONFIG && GTO_CONFIG.twitch) || {};
   const FORCE_TYPE = typeof CFG.forcePlayerType === "string" ? CFG.forcePlayerType : "popout";
 
   const LOG = (...a) => console.log("%c[gtoblock]", "color:#7c5cff;font-weight:bold", ...a);

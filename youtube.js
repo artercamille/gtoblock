@@ -1,7 +1,13 @@
-// YouTube : saute les pubs vidéo, masque les pubs du fil et le popup anti-bloqueur
+// gtoblock — YouTube : saute les pubs vidéo, masque les pubs du fil et le popup anti-bloqueur
+// (ce script n'est chargé que si l'extension est activée)
 (() => {
-  let enabled = true;
-  let style = null;
+  const send = (m) => {
+    try {
+      const p = chrome.runtime.sendMessage(m);
+      if (p && p.catch) p.catch(() => {});
+    } catch (e) {}
+  };
+
   let inAd = false;
   let saved = { muted: false, rate: 1 };
   let lastAdSrc = null;
@@ -28,26 +34,11 @@
   const SKIP_BUTTONS =
     ".ytp-skip-ad-button, .ytp-ad-skip-button, .ytp-ad-skip-button-modern, .ytp-ad-skip-button-container button";
 
-  function applyCss() {
-    if (enabled && !style) {
-      style = document.createElement("style");
-      style.textContent = CSS;
-      (document.head || document.documentElement).appendChild(style);
-    } else if (!enabled && style) {
-      style.remove();
-      style = null;
-    }
-  }
-
-  function countAd() {
-    chrome.storage.local.get({ blocked: 0 }, (r) =>
-      chrome.storage.local.set({ blocked: r.blocked + 1 })
-    );
-  }
+  const style = document.createElement("style");
+  style.textContent = CSS;
+  (document.head || document.documentElement).appendChild(style);
 
   function tick() {
-    if (!enabled) return;
-
     const player = document.querySelector("#movie_player, #player");
     const video = player && player.querySelector("video");
 
@@ -60,7 +51,7 @@
       // Pub toujours là après 8 s malgré le skip : YouTube a changé quelque chose
       if (!leakSent && Date.now() - adSince > 8000) {
         leakSent = true;
-        chrome.runtime.sendMessage({ type: "leak", site: "YT" }).catch(() => {});
+        send({ type: "leak", site: "YT" });
       }
       document.querySelectorAll(SKIP_BUTTONS).forEach((b) => b.click());
       video.muted = true;
@@ -70,7 +61,7 @@
       }
       if (video.src && video.src !== lastAdSrc) {
         lastAdSrc = video.src;
-        countAd();
+        send({ type: "count" });
       }
     } else if (inAd && video) {
       inAd = false;
@@ -85,21 +76,10 @@
       const dialog = wall.closest("tp-yt-paper-dialog");
       if (dialog) dialog.remove();
       document.querySelectorAll("tp-yt-iron-overlay-backdrop").forEach((b) => b.remove());
-      document.body && (document.body.style.overflow = "");
+      if (document.body) document.body.style.overflow = "";
       if (video && video.paused) video.play().catch(() => {});
     }
   }
-
-  chrome.storage.local.get({ enabled: true }, (r) => {
-    enabled = r.enabled;
-    applyCss();
-  });
-  chrome.storage.onChanged.addListener((c) => {
-    if (c.enabled) {
-      enabled = c.enabled.newValue;
-      applyCss();
-    }
-  });
 
   setInterval(tick, 250);
 })();

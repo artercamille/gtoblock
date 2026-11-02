@@ -269,23 +269,9 @@
     }
   }
 
-  // Petit badge visible pendant qu'une pub est zappée (preuve que ça marche)
-  let badge = null;
-  function showBadge(on) {
-    if (on) {
-      window.postMessage({ __gtoblock: "ad" }, "*");
-      if (!badge) {
-        badge = document.createElement("div");
-        badge.textContent = "🛡️ gtoblock : pub zappée, le live continue";
-        badge.style.cssText =
-          "position:fixed;left:16px;bottom:16px;z-index:2147483647;background:#7c5cff;color:#fff;" +
-          "font:600 13px system-ui,sans-serif;padding:8px 14px;border-radius:999px;" +
-          "box-shadow:0 4px 14px rgba(0,0,0,.4);pointer-events:none";
-      }
-      (document.body || document.documentElement).appendChild(badge);
-    } else if (badge) {
-      badge.remove();
-    }
+  // Pub zappée : on prévient juste le compteur, rien ne s'affiche à l'écran
+  function onAd(on) {
+    if (on) window.postMessage({ __gtoblock: "ad" }, "*");
   }
 
   // 2) On remplace le constructeur Worker pour injecter notre code dans le lecteur.
@@ -324,7 +310,7 @@
         e.stopImmediatePropagation();
         if (d.key === "AB_Fetch") relay(this, d);
         else if (d.key === "AB_Log") LOG(d.value);
-        else if (d.key === "AB_Ad") showBadge(d.value);
+        else if (d.key === "AB_Ad") onAd(d.value);
       });
     }
   }

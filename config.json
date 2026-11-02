@@ -1,8 +1,11 @@
 {
-  "version": 1,
+  "version": 2,
   "twitch": {
     "forcePlayerType": "popout",
-    "backupTypes": ["embed", "popout", "autoplay", "picture-by-picture"],
+    "backupPlayers": ["popout", "site", "embed", "frontpage", "dashboard", "site/android", "popout/android", "embed/android", "site/ios"],
+    "lowResPlayers": ["autoplay", "picture-by-picture"],
+    "backupAnonymous": true,
+    "backupTimeoutMs": 4000,
     "adMarker": "stitched"
   }
 }

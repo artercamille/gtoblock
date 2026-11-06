@@ -20,16 +20,25 @@
   function workerHook(cfg) {
     const realFetch = self.fetch.bind(self);
     const AD = cfg.adMarker || "stitched";
-    const toCombo = (s) => {
+    const ANON_FIRST = cfg.backupAnonymous !== false;
+    const toCombo = (s, anon) => {
       const [type, platform] = String(s).split("/");
-      return { key: String(s), type, platform: platform || (type === "autoplay" ? "android" : "web") };
+      return {
+        key: String(s) + (anon ? "" : "+compte"),
+        type,
+        platform: platform || (type === "autoplay" ? "android" : "web"),
+        anon,
+      };
     };
-    const HD = (Array.isArray(cfg.backupPlayers) && cfg.backupPlayers.length
+    const HD_LIST = (Array.isArray(cfg.backupPlayers) && cfg.backupPlayers.length
       ? cfg.backupPlayers
       : ["popout", "site", "embed", "frontpage", "dashboard", "site/android", "popout/android", "embed/android", "site/ios"]
-    ).map(toCombo);
-    const LOW = (Array.isArray(cfg.lowResPlayers) ? cfg.lowResPlayers : ["autoplay", "picture-by-picture"]).map(toCombo);
-    const ANON = cfg.backupAnonymous !== false;
+    );
+    const LOW_LIST = Array.isArray(cfg.lowResPlayers) ? cfg.lowResPlayers : ["autoplay", "picture-by-picture"];
+    // D'abord en anonyme (moins de pubs), puis avec le compte (formats réservés aux comptes)
+    const HD = HD_LIST.map((s) => toCombo(s, ANON_FIRST));
+    const HD_ACCOUNT = ANON_FIRST ? HD_LIST.map((s) => toCombo(s, false)) : [];
+    const LOW = LOW_LIST.map((s) => toCombo(s, ANON_FIRST));
     const TIMEOUT = cfg.backupTimeoutMs || 4000;
 
     const byUrl = {}; // URL playlist d'une qualité -> { info, cur }
@@ -47,11 +56,11 @@
     });
 
     // La requête GQL passe par la page
-    function gql(body) {
+    function gql(body, anon) {
       return new Promise((resolve) => {
         const id = Math.random().toString(36).slice(2);
         pending.set(id, resolve);
-        postMessage({ key: "AB_Fetch", id, anon: ANON, body: JSON.stringify(body) });
+        postMessage({ key: "AB_Fetch", id, anon, body: JSON.stringify(body) });
         setTimeout(() => {
           if (pending.has(id)) {
             pending.delete(id);
@@ -67,7 +76,7 @@
         query:
           'query PlaybackAccessToken_Template($login: String!, $isLive: Boolean!, $vodID: ID!, $isVod: Boolean!, $playerType: String!, $platform: String!) { streamPlaybackAccessToken(channelName: $login, params: {platform: $platform, playerBackend: "mediaplayer", playerType: $playerType}) @include(if: $isLive) { value signature __typename } videoPlaybackAccessToken(id: $vodID, params: {platform: $platform, playerBackend: "mediaplayer", playerType: $playerType}) @include(if: $isVod) { value signature __typename } }',
         variables: { isLive: true, login: channel, isVod: false, vodID: "", playerType: combo.type, platform: combo.platform },
-      });
+      }, combo.anon);
       if (r.status !== 200) return null;
       try {
         return JSON.parse(r.text).data.streamPlaybackAccessToken || null;
@@ -85,18 +94,21 @@
         if (!url.includes(".m3u8")) continue;
         const res = lines[i].match(/RESOLUTION=(\d+)x(\d+)/);
         const fps = lines[i].match(/FRAME-RATE=([\d.]+)/);
+        const codec = lines[i].match(/CODECS="([a-z0-9]{4})/i);
         out.push({
           url,
           res: res ? res[1] + "x" + res[2] : "",
           h: res ? +res[2] : 0,
           fps: fps ? Math.round(+fps[1]) : 0,
+          codec: codec ? codec[1].toLowerCase().replace("hvc1", "hev1") : "",
         });
       }
       return out;
     }
 
     function pickVariant(master, cur) {
-      const vs = parseVariants(master);
+      // Changer de codec en cours de lecture (HEVC -> H.264) fait planter le lecteur
+      const vs = parseVariants(master).filter((v) => !cur.codec || !v.codec || v.codec === cur.codec);
       if (!vs.length) return null;
       const same =
         vs.find((v) => v.res === cur.res && v.fps === cur.fps) || vs.find((v) => v.res === cur.res);
@@ -168,6 +180,7 @@
       }
       info.lastSearch = Date.now();
       let best = await search(info, cur, HD);
+      if (!best && HD_ACCOUNT.length) best = await search(info, cur, HD_ACCOUNT);
       if (!best) best = await search(info, cur, LOW);
       if (best) {
         info.good = best.combo;

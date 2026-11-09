@@ -39,7 +39,7 @@
     const HD = HD_LIST.map((s) => toCombo(s, ANON_FIRST));
     const HD_ACCOUNT = ANON_FIRST ? HD_LIST.map((s) => toCombo(s, false)) : [];
     const LOW = LOW_LIST.map((s) => toCombo(s, ANON_FIRST));
-    const TIMEOUT = cfg.backupTimeoutMs || 4000;
+    const TIMEOUT = cfg.backupTimeoutMs || 7000;
 
     const byUrl = {}; // URL playlist d'une qualité -> { info, cur }
     const pending = new Map();
@@ -119,23 +119,35 @@
       return sized[0];
     }
 
+    // Playlist principale d'un type de lecteur (jeton + usher), gardée en cache
+    const CACHE_MS = 8 * 60 * 1000;
+    async function getMaster(info, combo, force) {
+      const c = info.cache[combo.key];
+      if (!force && c && Date.now() - c.at < CACHE_MS) return c.master;
+      const t = await getToken(info.channel, combo);
+      if (!t) return null;
+      const u = new URL("https://usher.ttvnw.net" + info.path + info.search);
+      u.searchParams.set("sig", t.signature);
+      u.searchParams.set("token", t.value);
+      u.searchParams.delete("parent_domains");
+      u.searchParams.set("p", String(Math.floor(Math.random() * 1e7)));
+      const r = await realFetch(u.href);
+      if (r.status !== 200) return null;
+      const master = await r.text();
+      info.cache[combo.key] = { master, at: Date.now() };
+      return master;
+    }
+
+    // Prépare les flux de secours en avance : quand la pub arrive, une seule requête suffit
+    function warm(info) {
+      HD.slice(0, 4).forEach((c) => getMaster(info, c).catch(() => {}));
+    }
+
     // Essaie un type de lecteur : renvoie sa playlist s'il n'a pas de pub
     async function tryCombo(info, combo, cur) {
-      let master = info.cache[combo.key];
       for (let attempt = 0; attempt < 2; attempt++) {
-        const fresh = !master;
-        if (!master) {
-          const t = await getToken(info.channel, combo);
-          if (!t) return null;
-          const u = new URL("https://usher.ttvnw.net" + info.path + info.search);
-          u.searchParams.set("sig", t.signature);
-          u.searchParams.set("token", t.value);
-          u.searchParams.delete("parent_domains");
-          u.searchParams.set("p", String(Math.floor(Math.random() * 1e7)));
-          const r = await realFetch(u.href);
-          if (r.status !== 200) return null;
-          master = info.cache[combo.key] = await r.text();
-        }
+        const master = await getMaster(info, combo, attempt > 0);
+        if (!master) return null;
         const v = pickVariant(master, cur);
         if (!v) return null;
         const r = await realFetch(v.url);
@@ -143,49 +155,81 @@
           const text = await r.text();
           if (text && !text.includes(AD)) return { combo, text, h: v.h };
         }
-        info.cache[combo.key] = master = null; // jeton périmé ou flux avec pub
-        if (fresh) return null;
+        // jeton périmé ou flux avec pub : on retente une fois avec un jeton neuf
       }
       return null;
     }
 
-    // Teste plusieurs types en parallèle, garde le meilleur : même qualité d'abord
-    async function search(info, cur, combos) {
-      const results = await Promise.all(
-        combos.map((c) => withTimeout(tryCombo(info, c, cur).catch(() => null), TIMEOUT))
-      );
-      let best = null;
-      let bestRank = Infinity;
-      results.forEach((r, i) => {
-        if (!r) return;
-        const rank = (r.h >= cur.h ? 0 : 10000 - r.h) * 100 + i;
-        if (rank < bestRank) {
-          best = r;
-          bestRank = rank;
-        }
+    // Teste plusieurs types en parallèle. Dès qu'un flux de même qualité sans pub répond,
+    // on le prend tout de suite (pas besoin d'attendre les plus lents).
+    function search(info, cur, combos) {
+      return new Promise((resolve) => {
+        if (!combos.length) return resolve(null);
+        const results = new Array(combos.length).fill(null);
+        let left = combos.length;
+        let done = false;
+        const finish = () => {
+          if (done) return;
+          done = true;
+          let best = null;
+          let bestRank = Infinity;
+          results.forEach((r, i) => {
+            if (!r) return;
+            const rank = (r.h >= cur.h ? 0 : 10000 - r.h) * 100 + i;
+            if (rank < bestRank) {
+              best = r;
+              bestRank = rank;
+            }
+          });
+          resolve(best);
+        };
+        combos.forEach((c, i) => {
+          withTimeout(tryCombo(info, c, cur).catch(() => null), TIMEOUT).then((r) => {
+            results[i] = r;
+            if (r && r.h >= cur.h) finish();
+            if (--left === 0) finish();
+          });
+        });
       });
+    }
+
+    async function fullSearch(info, cur) {
+      let best = await search(info, cur, HD);
+      if ((!best || best.h < cur.h) && HD_ACCOUNT.length) {
+        const acc = await search(info, cur, HD_ACCOUNT);
+        if (acc && (!best || acc.h > best.h)) best = acc;
+      }
       return best;
+    }
+
+    function remember(info, r) {
+      info.good = r.combo;
+      info.goodH = r.h;
     }
 
     async function backupPlaylist(info, cur) {
       // Le dernier secours qui marchait : une seule requête
       if (info.good) {
-        const goodIsHd = info.goodH >= cur.h;
-        const retryHd = !goodIsHd && Date.now() - info.lastSearch > 8000;
-        if (!retryHd) {
-          const r = await withTimeout(tryCombo(info, info.good, cur).catch(() => null), TIMEOUT);
-          if (r) return r;
+        const r = await withTimeout(tryCombo(info, info.good, cur).catch(() => null), TIMEOUT);
+        if (r) {
+          // Secours en basse qualité : on cherche du HD en arrière-plan, sans bloquer la vidéo
+          if (r.h < cur.h && !info.hdSearching && Date.now() - info.lastSearch > 3000) {
+            info.hdSearching = true;
+            info.lastSearch = Date.now();
+            fullSearch(info, cur)
+              .then((hd) => {
+                if (hd && hd.h >= cur.h) remember(info, hd);
+              })
+              .finally(() => (info.hdSearching = false));
+          }
+          return r;
         }
         info.good = null;
       }
       info.lastSearch = Date.now();
-      let best = await search(info, cur, HD);
-      if (!best && HD_ACCOUNT.length) best = await search(info, cur, HD_ACCOUNT);
+      let best = await fullSearch(info, cur);
       if (!best) best = await search(info, cur, LOW);
-      if (best) {
-        info.good = best.combo;
-        info.goodH = best.h;
-      }
+      if (best) remember(info, best);
       return best;
     }
 
@@ -219,9 +263,10 @@
         const text = await resp.text();
         const info = {
           channel: m[1].toLowerCase(), path: u.pathname, search: u.search,
-          cache: {}, inAd: false, mode: null, good: null, goodH: 0, lastSearch: 0, lowRes: false,
+          cache: {}, inAd: false, mode: null, good: null, goodH: 0, lastSearch: 0, lowRes: false, hdSearching: false,
         };
         parseVariants(text).forEach((v) => (byUrl[v.url] = { info, cur: v }));
+        warm(info);
         return new Response(text, { status: 200, headers: resp.headers });
       }
 
@@ -257,6 +302,7 @@
           info.mode = null;
           info.good = null;
           info.cache = {};
+          warm(info);
           postMessage({ key: "AB_Ad", value: false, nudge: info.lowRes });
           log("Fin de la coupure pub" + (info.lowRes ? " (relance du lecteur en pleine qualité)" : ""));
         }

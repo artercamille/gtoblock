@@ -5,7 +5,7 @@
     "backupPlayers": ["popout", "site", "embed", "frontpage", "dashboard", "site/android", "popout/android", "embed/android", "site/ios"],
     "lowResPlayers": ["autoplay", "picture-by-picture"],
     "backupAnonymous": true,
-    "backupTimeoutMs": 4000,
+    "backupTimeoutMs": 7000,
     "adMarker": "stitched"
   }
 }

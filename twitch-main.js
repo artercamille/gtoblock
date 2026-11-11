@@ -253,6 +253,29 @@
       return out.join("\n");
     }
 
+    // Temps restant de la pub (en secondes), d'après les infos du flux Twitch
+    function adRemaining(text) {
+      const lines = text.replace(/\r/g, "").split("\n");
+      let adEnd = 0;
+      for (const l of lines) {
+        if (!l.startsWith("#EXT-X-DATERANGE") || !l.includes(AD)) continue;
+        const start = Date.parse((l.match(/START-DATE="([^"]+)"/) || [])[1] || "");
+        const dur = parseFloat((l.match(/DURATION=([\d.]+)/) || [])[1] || "");
+        if (start && dur) adEnd = Math.max(adEnd, start + dur * 1000);
+      }
+      // Heure du dernier morceau vidéo de la playlist = « maintenant » côté Twitch
+      let last = 0;
+      let lastDur = 0;
+      for (let i = 0; i < lines.length; i++) {
+        if (lines[i].startsWith("#EXT-X-PROGRAM-DATE-TIME:")) last = Date.parse(lines[i].slice(25));
+        if (lines[i].startsWith("#EXTINF:")) lastDur = parseFloat(lines[i].slice(8)) || 0;
+      }
+      if (!adEnd || !last) return null;
+      // le lecteur joue ~quelques morceaux derrière le bord du live
+      const rem = (adEnd - last - lastDur * 1000) / 1000 + 6;
+      return Math.max(0, Math.round(rem));
+    }
+
     // Dernier recours : on retire les segments pub (image figée quelques secondes, zéro pub)
     function strip(text) {
       const lines = text.replace(/\r/g, "").split("\n");
@@ -329,10 +352,9 @@
             } else {
               // Que de la pub partout (ex. pub d'avant-live sur tous les flux) : la retirer
               // laisserait le lecteur sans image (écran OFFLINE). On la laisse passer, cachée et muette.
-              if (info.mode !== "hide") {
-                log("Pub sur tous les flux : pub masquée et coupée, le live revient juste après");
-                postMessage({ key: "AB_Hide", value: true });
-              }
+              if (info.mode !== "hide") log("Pub sur tous les flux : écran « Pub en cours », le live revient juste après");
+              // envoyé à chaque rafraîchissement pour garder le compte à rebours à jour
+              postMessage({ key: "AB_Hide", value: true, remaining: adRemaining(text) });
               info.mode = "hide";
             }
           }
@@ -502,7 +524,7 @@
         if (d.key === "AB_Fetch") relay(this, d);
         else if (d.key === "AB_Log") LOG(d.value);
         else if (d.key === "AB_Ad") onAd(d.value, d.nudge);
-        else if (d.key === "AB_Hide") window.postMessage({ __gtoblock: "hide", on: !!d.value }, "*");
+        else if (d.key === "AB_Hide") window.postMessage({ __gtoblock: "hide", on: !!d.value, remaining: d.remaining == null ? null : d.remaining }, "*");
       });
     }
   }

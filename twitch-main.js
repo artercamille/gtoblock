@@ -233,6 +233,26 @@
       return best;
     }
 
+    // Retire de la playlist principale les qualités qui ne sont pas en H.264
+    function onlyH264(text) {
+      const lines = text.replace(/\r/g, "").split("\n");
+      const hasH264 = lines.some((l) => l.startsWith("#EXT-X-STREAM-INF") && /CODECS="avc1/i.test(l));
+      if (!hasH264) return text;
+      const out = [];
+      for (let i = 0; i < lines.length; i++) {
+        const l = lines[i];
+        if (l.startsWith("#EXT-X-STREAM-INF") && /CODECS="(?!avc1)/i.test(l)) {
+          // la ligne suivante est l'URL de cette qualité ; on retire aussi son #EXT-X-MEDIA juste avant
+          const group = (l.match(/VIDEO="([^"]+)"/) || [])[1];
+          if (group && out.length && out[out.length - 1].startsWith("#EXT-X-MEDIA") && out[out.length - 1].includes('GROUP-ID="' + group + '"')) out.pop();
+          i++;
+          continue;
+        }
+        out.push(l);
+      }
+      return out.join("\n");
+    }
+
     // Dernier recours : on retire les segments pub (image figée quelques secondes, zéro pub)
     function strip(text) {
       const lines = text.replace(/\r/g, "").split("\n");
@@ -260,7 +280,11 @@
         const m = u.pathname.match(/([^/]+)\.m3u8$/);
         const resp = await realFetch(u.href, init);
         if (!m || resp.status !== 200) return resp;
-        const text = await resp.text();
+        let text = await resp.text();
+        // Les formats « Enhanced » (1440p HEVC / AV1) n'existent qu'avec le compte, et Twitch
+        // y met souvent des pubs partout : aucun flux de secours possible, le lecteur se coupait.
+        // On ne garde que le H.264 (jusqu'à 1080p60), pour lequel il y a toujours un secours.
+        if (cfg.keepEnhanced !== true) text = onlyH264(text);
         const info = {
           channel: m[1].toLowerCase(), path: u.pathname, search: u.search,
           cache: {}, inAd: false, mode: null, good: null, goodH: 0, lastSearch: 0, lowRes: false, hdSearching: false,
@@ -285,6 +309,7 @@
             postMessage({ key: "AB_Ad", value: true });
           }
           const b = await backupPlaylist(info, cur);
+          if (b && info.mode === "hide") postMessage({ key: "AB_Hide", value: false });
           if (b) {
             const label = b.combo.key + " " + (b.h ? b.h + "p" : "");
             if (info.mode !== label) log("Pub remplacée par le flux « " + label + " »");
@@ -292,13 +317,28 @@
             if (b.h && cur.h && b.h < cur.h) info.lowRes = true;
             text = b.text;
           } else {
-            if (info.mode !== "strip") log("Aucun flux sans pub dispo : segments pub retirés");
-            info.mode = "strip";
-            info.lowRes = true;
-            text = strip(text);
+            const stripped = strip(text);
+            const liveLeft = (stripped.match(/^#EXTINF/gm) || []).length;
+            if (liveLeft >= 2) {
+              // Il reste du live : on retire juste la pub
+              if (info.mode !== "strip") log("Aucun flux sans pub dispo : segments pub retirés");
+              if (info.mode === "hide") postMessage({ key: "AB_Hide", value: false });
+              info.mode = "strip";
+              info.lowRes = true;
+              text = stripped;
+            } else {
+              // Que de la pub partout (ex. pub d'avant-live sur tous les flux) : la retirer
+              // laisserait le lecteur sans image (écran OFFLINE). On la laisse passer, cachée et muette.
+              if (info.mode !== "hide") {
+                log("Pub sur tous les flux : pub masquée et coupée, le live revient juste après");
+                postMessage({ key: "AB_Hide", value: true });
+              }
+              info.mode = "hide";
+            }
           }
         } else if (info.inAd) {
           info.inAd = false;
+          if (info.mode === "hide") postMessage({ key: "AB_Hide", value: false });
           info.mode = null;
           info.good = null;
           info.cache = {};
@@ -462,6 +502,7 @@
         if (d.key === "AB_Fetch") relay(this, d);
         else if (d.key === "AB_Log") LOG(d.value);
         else if (d.key === "AB_Ad") onAd(d.value, d.nudge);
+        else if (d.key === "AB_Hide") window.postMessage({ __gtoblock: "hide", on: !!d.value }, "*");
       });
     }
   }

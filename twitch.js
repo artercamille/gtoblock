@@ -15,6 +15,7 @@
   let inAd = false;
   let savedMuted = false;
   let cover = null;
+  let hidden = false; // pub laissée passer volontairement (aucun flux sans pub) : on la cache
 
   const CSS = `
     [data-a-target="ads-banner"], [data-test-selector="ad-banner-default-text"],
@@ -38,13 +39,14 @@
   function tick() {
     const video = document.querySelector("video");
     const container = video && video.closest('[data-a-target="video-player"], .video-player');
-    const adOn = !!document.querySelector(AD_MARKERS);
+    const adOn = hidden || !!document.querySelector(AD_MARKERS);
 
     if (adOn && video && container) {
       if (!inAd) {
         inAd = true;
         savedMuted = video.muted;
-        send({ type: "leak", site: "TW" });
+        // Alerte seulement si la pub passe sans qu'on l'ait prévu
+        if (!hidden) send({ type: "leak", site: "TW" });
       }
       video.muted = true;
       if (!cover) {
@@ -64,7 +66,12 @@
 
   // Le module de la page signale chaque pub zappée
   window.addEventListener("message", (e) => {
-    if (e.source === window && e.data && e.data.__gtoblock === "ad") send({ type: "count" });
+    if (e.source !== window || !e.data) return;
+    if (e.data.__gtoblock === "ad") send({ type: "count" });
+    if (e.data.__gtoblock === "hide") {
+      hidden = !!e.data.on;
+      tick();
+    }
   });
 
   setInterval(tick, 300);

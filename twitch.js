@@ -16,7 +16,9 @@
   let savedMuted = false;
   let cover = null;
   let hidden = false; // pub laissée passer volontairement (aucun flux sans pub) : on la cache
-  let adEndsAt = 0; // heure de fin estimée de la pub (pour le compte à rebours)
+  let adEndsAt = 0;
+  let handled = false; // le module de la page est en train de remplacer la pub par le live
+  let handledAt = 0; // heure de fin estimée de la pub (pour le compte à rebours)
 
   const CSS = `
     [data-a-target="ads-banner"], [data-test-selector="ad-banner-default-text"],
@@ -32,6 +34,15 @@
     .gtoblock-cover b { font-size: 26px; font-weight: 700; letter-spacing: .5px; }
     .gtoblock-cover span { font-size: 44px; font-weight: 300; font-variant-numeric: tabular-nums; color: #bf94ff; }
     .gtoblock-cover span:empty { display: none; }
+    /* Pub remplacée par le live : on cache l'interface pub que Twitch affiche quand même */
+    html.gtoblock-handled [data-a-target="video-ad-label"],
+    html.gtoblock-handled [data-a-target="video-ad-countdown"],
+    html.gtoblock-handled [data-a-target="video-ad-banner"],
+    html.gtoblock-handled [data-test-selector="ad-banner-default-text"],
+    html.gtoblock-handled [class*="video-ad__"],
+    html.gtoblock-handled [class*="VideoAd"],
+    html.gtoblock-handled [class*="ad-countdown"]
+    { display: none !important; }
   `;
   const style = document.createElement("style");
   style.textContent = CSS;
@@ -43,7 +54,12 @@
   function tick() {
     const video = document.querySelector("video");
     const container = video && video.closest('[data-a-target="video-player"], .video-player');
-    const adOn = hidden || !!document.querySelector(AD_MARKERS);
+    // Le bandeau « Publicité » de Twitch s'affiche même quand la pub a été remplacée par le live :
+    // on ne cache l'image que si on a choisi de laisser passer la pub (hidden) ou si la pub
+    // passe vraiment sans qu'on l'ait remplacée.
+    if (handled && Date.now() - handledAt > 5 * 60 * 1000) handled = false; // sécurité
+    document.documentElement.classList.toggle("gtoblock-handled", handled && !hidden);
+    const adOn = hidden || (!handled && !!document.querySelector(AD_MARKERS));
 
     if (adOn && video && container) {
       if (!inAd) {
@@ -83,7 +99,16 @@
   // Le module de la page signale chaque pub zappée
   window.addEventListener("message", (e) => {
     if (e.source !== window || !e.data) return;
-    if (e.data.__gtoblock === "ad") send({ type: "count" });
+    if (e.data.__gtoblock === "ad") {
+      handled = true;
+      handledAt = Date.now();
+      send({ type: "count" });
+      tick();
+    }
+    if (e.data.__gtoblock === "adend") {
+      handled = false;
+      tick();
+    }
     if (e.data.__gtoblock === "hide") {
       hidden = !!e.data.on;
       if (!hidden) adEndsAt = 0;

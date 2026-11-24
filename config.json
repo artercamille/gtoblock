@@ -1,9 +1,25 @@
 {
-  "version": 2,
+  "version": 3,
   "twitch": {
     "forcePlayerType": "popout",
-    "backupPlayers": ["popout", "site", "embed", "frontpage", "dashboard", "site/android", "popout/android", "embed/android", "site/ios"],
-    "lowResPlayers": ["autoplay", "picture-by-picture"],
+    "backupPlayers": [
+      "popout",
+      "site",
+      "embed",
+      "frontpage",
+      "dashboard",
+      "site/android",
+      "popout/android",
+      "embed/android",
+      "site/ios"
+    ],
+    "lowResPlayers": [
+      "autoplay",
+      "picture-by-picture/android",
+      "picture-by-picture/ios",
+      "autoplay/ios",
+      "picture-by-picture"
+    ],
     "backupAnonymous": true,
     "backupTimeoutMs": 7000,
     "adMarker": "stitched"

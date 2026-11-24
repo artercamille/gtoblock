@@ -34,11 +34,13 @@
       ? cfg.backupPlayers
       : ["popout", "site", "embed", "frontpage", "dashboard", "site/android", "popout/android", "embed/android", "site/ios"]
     );
-    const LOW_LIST = Array.isArray(cfg.lowResPlayers) ? cfg.lowResPlayers : ["autoplay", "picture-by-picture"];
+    const LOW_LIST = Array.isArray(cfg.lowResPlayers)
+      ? cfg.lowResPlayers
+      : ["autoplay", "picture-by-picture/android", "picture-by-picture/ios", "autoplay/ios", "picture-by-picture"];
     // D'abord en anonyme (moins de pubs), puis avec le compte (formats réservés aux comptes)
     const HD = HD_LIST.map((s) => toCombo(s, ANON_FIRST));
     const HD_ACCOUNT = ANON_FIRST ? HD_LIST.map((s) => toCombo(s, false)) : [];
-    const LOW = LOW_LIST.map((s) => toCombo(s, ANON_FIRST));
+    const LOW = LOW_LIST.map((s) => toCombo(s, ANON_FIRST)).concat(ANON_FIRST ? LOW_LIST.map((s) => toCombo(s, false)) : []);
     const TIMEOUT = cfg.backupTimeoutMs || 7000;
 
     const byUrl = {}; // URL playlist d'une qualité -> { info, cur }
@@ -470,6 +472,7 @@
       window.postMessage({ __gtoblock: "ad" }, "*");
       return;
     }
+    window.postMessage({ __gtoblock: "adend" }, "*");
     if (!nudge || !wasPlaying) return;
     // On est passé par une qualité plus basse : on recale le lecteur sur le vrai flux
     setTimeout(() => {
